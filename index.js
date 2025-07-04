@@ -59,10 +59,56 @@ class AudioDucker {
         }
       }
       
-      return speechData.sort((a, b) => a.start - b.start);
+      const sortedData = speechData.sort((a, b) => a.start - b.start);
+      return this.mergeContiguousSegments(sortedData);
     } catch (error) {
       throw new Error(`Error loading speech data: ${error.message}`);
     }
+  }
+
+  /**
+   * Merge contiguous or overlapping speech segments to avoid unnatural transitions
+   * @param {Array} speechData - Sorted array of speech segments
+   * @returns {Array} Array of merged speech segments
+   */
+  mergeContiguousSegments(speechData) {
+    if (speechData.length === 0) return [];
+    
+    const mergeThreshold = this.fadeInDuration + this.fadeOutDuration + 0.1; // Small buffer
+    const merged = [];
+    let currentSegment = { ...speechData[0] };
+    
+    for (let i = 1; i < speechData.length; i++) {
+      const nextSegment = speechData[i];
+      const currentEnd = currentSegment.start + currentSegment.duration;
+      const nextStart = nextSegment.start;
+      const gap = nextStart - currentEnd;
+      
+      // If segments are overlapping or very close together, merge them
+      if (gap <= mergeThreshold) {
+        // Extend current segment to cover the next one
+        const nextEnd = nextSegment.start + nextSegment.duration;
+        const newEnd = Math.max(currentEnd, nextEnd);
+        currentSegment.duration = newEnd - currentSegment.start;
+        
+        // Combine text if available
+        if (currentSegment.text && nextSegment.text) {
+          currentSegment.text += ' ' + nextSegment.text;
+        }
+        
+        console.log(`Merged segments: ${currentSegment.start}s-${currentEnd}s with ${nextStart}s-${nextEnd}s (gap: ${gap.toFixed(2)}s)`);
+      } else {
+        // Gap is large enough, save current segment and start new one
+        merged.push(currentSegment);
+        currentSegment = { ...nextSegment };
+      }
+    }
+    
+    // Add the last segment
+    merged.push(currentSegment);
+    
+    console.log(`Original segments: ${speechData.length}, Merged segments: ${merged.length}`);
+    return merged;
   }
 
   /**
